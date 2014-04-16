@@ -9,6 +9,8 @@ HelloWorld::HelloWorld() :_ptrPhysicsWorld(NULL)
 , armBody(NULL)
 , armJoint(NULL)
 , m_mouseJoint(NULL)
+, m_currentBullet(0)
+, m_releaseingArm(false)
 {
 
 }
@@ -100,6 +102,11 @@ bool HelloWorld::init()
 
 	initArm();
 
+	CCCallFunc *callSelectorAction = CCCallFunc::create(this, callfunc_selector(HelloWorld::resetGame));
+	this->runAction(CCSequence::create(CCDelayTime::create(0.2f),
+		callSelectorAction,
+		NULL));
+
 	scheduleUpdate();
     
     return true;
@@ -177,6 +184,30 @@ void HelloWorld::update(float delta)
 
 		}
 	}
+
+	if (m_releaseingArm && m_bulletJoint != NULL)
+	{
+		if (armJoint->GetJointAngle() < CC_DEGREES_TO_RADIANS(10))
+		{
+			m_releaseingArm = false;
+			_ptrPhysicsWorld->DestroyJoint(m_bulletJoint);
+			m_bulletJoint = NULL;
+		}
+	}
+
+	if (m_bulletBody && m_bulletJoint == NULL)
+	{
+		b2Vec2 position = m_bulletBody->GetPosition();
+		CCPoint myPosition = this->getPosition();
+		CCSize screenSize = CCDirector::sharedDirector()->getWinSize();
+
+		// Move the camera. 
+		if (position.x > screenSize.width / 2.0f / PTM_RATIO)
+		{
+			myPosition.x = -MIN(screenSize.width * 2.0f - screenSize.width, position.x * PTM_RATIO - screenSize.width / 2.0f);
+			this->setPosition(myPosition);
+		}
+	}
 }
 
 void HelloWorld::draw()
@@ -217,9 +248,9 @@ void HelloWorld::initArm()
 	armJointDef.Initialize(m_groundBody, armBody, b2Vec2(233.0f / PTM_RATIO, FLOOR_HEIGHT / PTM_RATIO));
 	armJointDef.enableLimit = true;
 	armJointDef.enableMotor = true;
-	armJointDef.motorSpeed = -1260;
+	armJointDef.motorSpeed = -10;
 	armJointDef.lowerAngle = CC_DEGREES_TO_RADIANS(9);
-	armJointDef.upperAngle = CC_DEGREES_TO_RADIANS(75);
+	armJointDef.upperAngle = CC_DEGREES_TO_RADIANS(60);
 	armJointDef.maxMotorTorque = 4800;
 
 	armJoint = (b2RevoluteJoint*)_ptrPhysicsWorld->CreateJoint(&armJointDef);
@@ -263,6 +294,13 @@ void HelloWorld::ccTouchesEnded(CCSet *pTouches, CCEvent *pEvent)
 {
 	if (m_mouseJoint != NULL)
 	{
+		if (m_mouseJoint != NULL)
+		{
+			if (armJoint->GetJointAngle() >= CC_DEGREES_TO_RADIANS(5))
+			{
+				m_releaseingArm = true;
+			}
+		}
 		_ptrPhysicsWorld->DestroyJoint(m_mouseJoint);
 		m_mouseJoint = NULL;
 		return;
@@ -285,6 +323,76 @@ void HelloWorld::onExit()
 	CCLayer::onExit();
 	this->setTouchEnabled(false);
 }
+
+void HelloWorld::createBullets(int count)
+{
+	m_currentBullet = 0;
+	float pos = 62.0f;
+
+	if (count > 0)
+	{
+		// delta is the spacing between corns 
+		// 62 is the position o the screen where we want the corns to start appearing 
+		// 165 is the position on the screen where we want the corns to stop appearing 
+		// 30 is the size of the corn 
+
+		float delta = (count > 1) ? ((165.0f - 62.0f - 30.0f) / (count - 1)) : 0.0f;
+
+		for (int i = 0; i < count; i++, pos += delta)
+		{
+			// Create the bullet 
+			CCSprite *sprite = CCSprite::create("images/acorn.png");
+			this->addChild(sprite, 1);
+
+			b2BodyDef bulletBodyDef;
+			bulletBodyDef.type = b2_dynamicBody;
+			bulletBodyDef.bullet = true;
+			bulletBodyDef.position.Set(pos / PTM_RATIO, (FLOOR_HEIGHT + 15.0f) / PTM_RATIO);
+			bulletBodyDef.userData = sprite;
+			b2Body *bullet = _ptrPhysicsWorld->CreateBody(&bulletBodyDef);
+			bullet->SetActive(false);
+
+			b2CircleShape circle;
+			circle.m_radius = 15.0 / PTM_RATIO;
+
+			b2FixtureDef ballShapeDef;
+			ballShapeDef.shape = &circle;
+			ballShapeDef.density = 0.8f;
+			ballShapeDef.restitution = 0.2f;
+			ballShapeDef.friction = 0.99f;
+			bullet->CreateFixture(&ballShapeDef);
+
+			m_bullets.push_back(bullet);
+		}
+	}
+}
+
+bool HelloWorld::attachBullet()
+{
+	if (m_currentBullet < m_bullets.size())
+	{
+		m_bulletBody = (b2Body*)m_bullets.at(m_currentBullet++);
+		m_bulletBody->SetTransform(b2Vec2(230.0f / PTM_RATIO, (155.0f + FLOOR_HEIGHT) / PTM_RATIO), 0.0f);
+		m_bulletBody->SetActive(true);
+
+		b2WeldJointDef weldJointDef;
+		weldJointDef.Initialize(m_bulletBody, armBody, b2Vec2(230.0f / PTM_RATIO, (155.0f + FLOOR_HEIGHT) / PTM_RATIO));
+		weldJointDef.collideConnected = false;
+
+		m_bulletJoint = (b2WeldJoint*)_ptrPhysicsWorld->CreateJoint(&weldJointDef);
+		return true;
+	}
+	return false;
+}
+
+void HelloWorld::resetGame()
+{
+	this->createBullets(4);
+	this->attachBullet();
+}
+
+
+
 
 
 

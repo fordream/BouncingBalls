@@ -40,6 +40,10 @@ public:
 	virtual void ccTouchesMoved(CCSet *pTouches, CCEvent *pEvent);
 	virtual void ccTouchesEnded(CCSet *pTouches, CCEvent *pEvent);
 
+	void createBullets(int count);
+	bool attachBullet();
+	void resetGame();
+
 private:
 	b2World* _ptrPhysicsWorld;
 	GLESDebugDraw* _ptrDebugDraw;
@@ -48,6 +52,13 @@ private:
 	b2Body *armBody;
 	b2RevoluteJoint* armJoint;
 	b2MouseJoint* m_mouseJoint;
+
+	std::vector<b2Body*> m_bullets;
+	int m_currentBullet;
+
+	b2Body* m_bulletBody;
+	b2WeldJoint* m_bulletJoint;
+	bool m_releaseingArm;
 };
 
 #endif // __HELLOWORLD_SCENE_H__
